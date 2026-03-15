@@ -21,7 +21,10 @@ PATTERNS = """
 Use complex easing functions like easeInOutQuint, restrict color palettes to 4-5 vivid hex codes,
 utilize object-oriented classes with asynchronous animation states, avoid pure randomness in favor
 of noise or grid-anchored offsets. Make it look like a professional p5.js generative art piece.
-IMPORTANT CAMERA SETTINGS: For WEBGL sketches, ensure you position the camera properly so all objects are visible. Use a camera position like 'camera(0, 0, 1500, 0, 0, 0, 0, 1, 0)' to ensure the scene is captured correctly and objects are not clipped.
+IMPORTANT PERFORMANCE CONSTRAINTS: 
+1. If generating a 3D sketch, limit the number of active objects to a maximum of 3 to avoid rendering timeouts.
+2. Ensure you position the camera properly so all objects are visible (e.g., 'camera(0, 0, 1500, 0, 0, 0, 0, 1, 0)').
+3. Keep the scene geometry lightweight (avoid extreme recursive fractal depth).
 """
 
 gemini_client = genai.Client()
@@ -159,12 +162,22 @@ if __name__ == "__main__":
         print("Failed to generate code.")
         exit(1)
         
-    gif_file = asyncio.run(render_gif(html_code))
+    try:
+        gif_file = asyncio.run(render_gif(html_code))
+    except Exception as e:
+        err_msg = f"Art generation failed: {str(e)}"
+        print(err_msg)
+        if sender_jid:
+            subprocess.run(["wacli", "send", "text", "--to", sender_jid, "--message", err_msg])
+        exit(1)
     
     if sender_jid:
         print(f"Sending back to {sender_jid}...")
         cmd = ["wacli", "send", "file", "--to", sender_jid, "--file", gif_file, "--caption", "Here is your generated art!"]
-        subprocess.run(cmd)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Failed to send file: {result.stderr}")
+            subprocess.run(["wacli", "send", "text", "--to", sender_jid, "--message", "Generation success, but failed to send the file."])
     
     save_last_run()
     print("Done!")
