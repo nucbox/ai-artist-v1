@@ -5,6 +5,7 @@ import datetime
 import asyncio
 from playwright.async_api import async_playwright
 import imageio.v3 as iio
+from google import genai
 
 # Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +23,8 @@ utilize object-oriented classes with asynchronous animation states, avoid pure r
 of noise or grid-anchored offsets. Make it look like a professional p5.js generative art piece.
 """
 
+gemini_client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY', '').replace('Alza', 'AIza'))
+
 def get_last_run():
     if os.path.exists(state_file):
         with open(state_file, 'r') as f:
@@ -32,15 +35,24 @@ def save_last_run():
     with open(state_file, 'w') as f:
         f.write(datetime.datetime.utcnow().isoformat() + "Z")
 
+def ask_gemini(prompt):
+    response = gemini_client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt
+    )
+    return response.text.strip()
+
 def get_muse_prompt():
     if "MUSE_TEXT" in os.environ:
         user_text = os.environ["MUSE_TEXT"]
         sender_jid = os.environ.get("SENDER_JID", "")
         print(f"Received user message from listener: {user_text}")
-        gem_cmd = ["gemini", f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text."]
-        prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
-        if prompt_res.returncode == 0 and prompt_res.stdout.strip():
-            return prompt_res.stdout.strip(), sender_jid
+        try:
+            expanded = ask_gemini(f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text.")
+            if expanded:
+                return expanded, sender_jid
+        except Exception as e:
+            print(f"Gemini API error: {e}")
         return user_text, sender_jid
 
     last_run = get_last_run()
@@ -61,37 +73,40 @@ def get_muse_prompt():
                 if not sender_jid and 'key' in msg and 'remoteJid' in msg['key']:
                     sender_jid = msg['key']['remoteJid']
                 
-                # if we couldn't parse sender_jid, default to something or omit
-                
                 if user_text:
                     print(f"Found user message: {user_text} from {sender_jid}")
-                    # Enhance with Gemini
-                    gem_cmd = ["gemini", f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text."]
-                    prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
-                    if prompt_res.returncode == 0 and prompt_res.stdout.strip():
-                        return prompt_res.stdout.strip(), sender_jid
+                    try:
+                        expanded = ask_gemini(f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text.")
+                        if expanded:
+                            return expanded, sender_jid
+                    except Exception as e:
+                        print(f"Gemini API error: {e}")
     except Exception as e:
         print(f"Warning: WhatsApp fetch failed: {e}")
         
     # Autonomous mode
     print("No new messages found. Running autonomous brainstorming...")
-    gem_cmd = ["gemini", "Act as an avant-garde digital art director. Generate a highly creative generative art concept based on nature, current digital trends, or mathematics. Return ONLY the text description of the concept."]
-    prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
-    if prompt_res.returncode == 0:
-        return prompt_res.stdout.strip(), None
+    try:
+        expanded = ask_gemini("Act as an avant-garde digital art director. Generate a highly creative generative art concept based on nature, current digital trends, or mathematics. Return ONLY the text description of the concept.")
+        if expanded:
+            return expanded, None
+    except Exception as e:
+        print(f"Gemini API error: {e}")
     return "A complex geometric landscape of rippling cubes in neon green and deep purple.", None
 
 def generate_code(prompt):
     print("Generating code from concept...")
     sys_prompt = f"You are an expert generative artist writing p5.js code. The concept is: {prompt}. Apply these patterns strictly: {PATTERNS}. Return ONLY the raw HTML string containing the complete p5.js sketch. No markdown fences, no explanations."
-    gem_cmd = ["gemini", sys_prompt]
-    res = subprocess.run(gem_cmd, capture_output=True, text=True)
-    html = res.stdout.strip()
-    if html.startswith("```html"):
-        html = html[7:]
-    if html.endswith("```"):
-        html = html[:-3]
-    return html.strip()
+    try:
+        html = ask_gemini(sys_prompt)
+        if html.startswith("```html"):
+            html = html[7:]
+        if html.endswith("```"):
+            html = html[:-3]
+        return html.strip()
+    except Exception as e:
+        print(f"Gemini API error: {e}")
+        return ""
 
 async def render_gif(html_code):
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -131,7 +146,10 @@ if __name__ == "__main__":
     print(f"CONCEPT:\n{concept}\n")
     
     html_code = generate_code(concept)
-    
+    if not html_code:
+        print("Failed to generate code.")
+        exit(1)
+        
     gif_file = asyncio.run(render_gif(html_code))
     
     if sender_jid:
