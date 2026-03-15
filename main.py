@@ -76,6 +76,13 @@ def generate_code(prompt):
     return html.strip()
 
 async def render_gif(html_code):
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Save the generated code alongside the GIF
+    code_filename = os.path.join(gallery_dir, f"ai_art_{timestamp}.html")
+    with open(code_filename, "w") as f:
+        f.write(html_code)
+        
     html_path = os.path.join(script_dir, "dynamic_canvas.html")
     with open(html_path, "w") as f:
         f.write(html_code)
@@ -94,9 +101,10 @@ async def render_gif(html_code):
             os.remove(path)
             await asyncio.sleep(0.05)
             
-        filename = os.path.join(gallery_dir, f"ai_art_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.gif")
+        filename = os.path.join(gallery_dir, f"ai_art_{timestamp}.gif")
         iio.imwrite(filename, frames, duration=50, loop=0)
         print(f"Artwork saved: {filename}")
+        print(f"Code saved: {code_filename}")
         await browser.close()
         return filename
 
