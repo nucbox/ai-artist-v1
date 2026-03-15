@@ -35,13 +35,13 @@ for line in iter(process.stdout.readline, ''):
         # Check if it's a message event
         if "messages" in data:
             for msg in data["messages"]:
-                if msg.get("FromMe") is False:
-                    text = msg.get("Text", "")
-                    sender = msg.get("ChatJID", "")
-                    if text:
-                        print(f"[{datetime.datetime.now()}] New message detected: {text}")
-                        # trigger pipeline in background so we don't block the listener
-                        threading.Thread(target=run_pipeline, args=(text, sender)).start()
+                # Process all messages (even FromMe) unless it's a bot reply
+                text = msg.get("Text", "")
+                sender = msg.get("ChatJID", "")
+                if text and "Here is your generated art!" not in text and "I have successfully implemented the v0.0.1" not in text:
+                    print(f"[{datetime.datetime.now()}] New message detected: {text}")
+                    # trigger pipeline in background so we don't block the listener
+                    threading.Thread(target=run_pipeline, args=(text, sender)).start()
     except Exception as e:
         # Not JSON or parsing error
         pass
