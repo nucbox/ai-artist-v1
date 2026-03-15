@@ -44,14 +44,22 @@ def get_muse_prompt():
             # Try to parse output. The skill doc doesn't guarantee exact structure, so we just use the text.
             messages = json.loads(res.stdout)
             if messages:
-                user_text = messages[0].get('text', '')
+                # Find the most recent message since last_run
+                msg = messages[0]
+                user_text = msg.get('text', '')
+                sender_jid = msg.get('chatJid', '') or msg.get('sender', '')
+                if not sender_jid and 'key' in msg and 'remoteJid' in msg['key']:
+                    sender_jid = msg['key']['remoteJid']
+                
+                # if we couldn't parse sender_jid, default to something or omit
+                
                 if user_text:
-                    print(f"Found user message: {user_text}")
+                    print(f"Found user message: {user_text} from {sender_jid}")
                     # Enhance with Gemini
                     gem_cmd = ["gemini", f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text."]
                     prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
                     if prompt_res.returncode == 0 and prompt_res.stdout.strip():
-                        return prompt_res.stdout.strip()
+                        return prompt_res.stdout.strip(), sender_jid
     except Exception as e:
         print(f"Warning: WhatsApp fetch failed: {e}")
         
@@ -60,8 +68,8 @@ def get_muse_prompt():
     gem_cmd = ["gemini", "Act as an avant-garde digital art director. Generate a highly creative generative art concept based on nature, current digital trends, or mathematics. Return ONLY the text description of the concept."]
     prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
     if prompt_res.returncode == 0:
-        return prompt_res.stdout.strip()
-    return "A complex geometric landscape of rippling cubes in neon green and deep purple."
+        return prompt_res.stdout.strip(), None
+    return "A complex geometric landscape of rippling cubes in neon green and deep purple.", None
 
 def generate_code(prompt):
     print("Generating code from concept...")
@@ -109,11 +117,17 @@ async def render_gif(html_code):
         return filename
 
 if __name__ == "__main__":
-    concept = get_muse_prompt()
+    concept, sender_jid = get_muse_prompt()
     print(f"CONCEPT:\n{concept}\n")
     
     html_code = generate_code(concept)
     
-    asyncio.run(render_gif(html_code))
+    gif_file = asyncio.run(render_gif(html_code))
+    
+    if sender_jid:
+        print(f"Sending back to {sender_jid}...")
+        cmd = ["wacli", "send", "file", "--to", sender_jid, "--file", gif_file, "--caption", "Here is your generated art!"]
+        subprocess.run(cmd)
+    
     save_last_run()
     print("Done!")
