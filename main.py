@@ -21,6 +21,7 @@ PATTERNS = """
 Use complex easing functions like easeInOutQuint, restrict color palettes to 4-5 vivid hex codes,
 utilize object-oriented classes with asynchronous animation states, avoid pure randomness in favor
 of noise or grid-anchored offsets. Make it look like a professional p5.js generative art piece.
+IMPORTANT CAMERA SETTINGS: For WEBGL sketches, ensure you position the camera properly so all objects are visible. Use a camera position like 'camera(0, 0, 1500, 0, 0, 0, 0, 1, 0)' to ensure the scene is captured correctly and objects are not clipped.
 """
 
 gemini_client = genai.Client()
@@ -126,12 +127,20 @@ async def render_gif(html_code):
         page = await browser.new_page()
         await page.goto(f"file://{html_path}")
         
+        # Wait for the p5 canvas to exist with a longer timeout
+        await page.wait_for_selector('canvas', timeout=20000)
+        # Give p5.js a moment to draw the first few frames
+        await asyncio.sleep(3)
+        
         frames = []
         for i in range(60):
             path = os.path.join(script_dir, f"frame_{i:03d}.png")
-            await page.screenshot(path=path)
-            frames.append(iio.imread(path))
-            os.remove(path)
+            try:
+                await page.screenshot(path=path)
+                frames.append(iio.imread(path))
+                os.remove(path)
+            except Exception as e:
+                print(f"Frame capture error: {e}")
             await asyncio.sleep(0.05)
             
         filename = os.path.join(gallery_dir, f"ai_art_{timestamp}.gif")
