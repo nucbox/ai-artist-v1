@@ -136,11 +136,11 @@ async def render_gif(html_code):
         for i in range(60):
             path = os.path.join(script_dir, f"frame_{i:03d}.png")
             try:
-                await page.screenshot(path=path)
+                await page.screenshot(path=path, timeout=60000)
                 frames.append(iio.imread(path))
                 os.remove(path)
             except Exception as e:
-                print(f"Frame capture error: {e}")
+                print(f"Error capturing frame {i}: {e}")
             await asyncio.sleep(0.05)
             
         filename = os.path.join(gallery_dir, f"ai_art_{timestamp}.gif")
