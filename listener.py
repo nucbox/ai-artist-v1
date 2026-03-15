@@ -3,35 +3,45 @@ import subprocess
 import os
 import json
 import datetime
+import threading
 
 # Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))
-state_file = os.path.join(script_dir, 'last_run.txt')
-
-def get_last_run():
-    if os.path.exists(state_file):
-        with open(state_file, 'r') as f:
-            return f.read().strip()
-    return "2000-01-01T00:00:00Z"
 
 print("Starting WhatsApp Listener Daemon for AI Artist...")
 
-while True:
-    last_run = get_last_run()
-    # Check for new messages
-    cmd = ["wacli", "messages", "search", "", "--limit", "1", "--json", "--after", last_run[:10]]
+def run_pipeline(text, sender_jid):
+    # Pass text to main.py via environment variables
+    env = os.environ.copy()
+    env["MUSE_TEXT"] = text
+    env["SENDER_JID"] = sender_jid
+    subprocess.run(["/home/nukebox/.openclaw/workspace/digital-art-engine/venv/bin/python3", os.path.join(script_dir, "main.py")], env=env)
+
+# Run wacli sync --follow
+process = subprocess.Popen(
+    ["wacli", "sync", "--follow", "--json"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    bufsize=1
+)
+
+for line in iter(process.stdout.readline, ''):
+    line = line.strip()
+    if not line or line == "Connected.":
+        continue
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0 and res.stdout.strip():
-            messages = json.loads(res.stdout)
-            if messages:
-                msg = messages[0]
-                user_text = msg.get('text', '')
-                if user_text:
-                    print(f"[{datetime.datetime.now()}] New message detected: {user_text}")
-                    # Run the pipeline
-                    subprocess.run(["/home/nukebox/.openclaw/workspace/digital-art-engine/venv/bin/python3", os.path.join(script_dir, "main.py")])
+        data = json.loads(line)
+        # Check if it's a message event
+        if "messages" in data:
+            for msg in data["messages"]:
+                if msg.get("FromMe") is False:
+                    text = msg.get("Text", "")
+                    sender = msg.get("ChatJID", "")
+                    if text:
+                        print(f"[{datetime.datetime.now()}] New message detected: {text}")
+                        # trigger pipeline in background so we don't block the listener
+                        threading.Thread(target=run_pipeline, args=(text, sender)).start()
     except Exception as e:
-        print(f"Error checking messages: {e}")
-        
-    time.sleep(10)
+        # Not JSON or parsing error
+        pass

@@ -33,6 +33,16 @@ def save_last_run():
         f.write(datetime.datetime.utcnow().isoformat() + "Z")
 
 def get_muse_prompt():
+    if "MUSE_TEXT" in os.environ:
+        user_text = os.environ["MUSE_TEXT"]
+        sender_jid = os.environ.get("SENDER_JID", "")
+        print(f"Received user message from listener: {user_text}")
+        gem_cmd = ["gemini", f"Act as an avant-garde digital art director. Take this raw idea: '{user_text}' and expand it into a rich generative art prompt. Return ONLY the prompt text."]
+        prompt_res = subprocess.run(gem_cmd, capture_output=True, text=True)
+        if prompt_res.returncode == 0 and prompt_res.stdout.strip():
+            return prompt_res.stdout.strip(), sender_jid
+        return user_text, sender_jid
+
     last_run = get_last_run()
     print(f"Checking for new messages since {last_run}...")
     
