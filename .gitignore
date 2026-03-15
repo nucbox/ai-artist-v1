@@ -1,0 +1,5 @@
+venv/
+__pycache__/
+gallery/
+last_run.txt
+dynamic_canvas.html
