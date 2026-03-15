@@ -23,7 +23,7 @@ utilize object-oriented classes with asynchronous animation states, avoid pure r
 of noise or grid-anchored offsets. Make it look like a professional p5.js generative art piece.
 """
 
-gemini_client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY', '').replace('Alza', 'AIza'))
+gemini_client = genai.Client()
 
 def get_last_run():
     if os.path.exists(state_file):
